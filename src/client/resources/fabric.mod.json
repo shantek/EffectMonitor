@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"id": "effectmonitor",
+	"version": "1.0.0",
+	"name": "Effect Monitor",
+	"description": "Notifies you when potion effects are about to expire.",
+	"authors": [
+		"Shantek"
+	],
+	"contact": {
+		"homepage": "https://shantek.io",
+		"sources": "https://github.com/shantek/effectmonitor"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"io.shantek.EffectMonitor"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.10",
+		"minecraft": "~1.21.5",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
