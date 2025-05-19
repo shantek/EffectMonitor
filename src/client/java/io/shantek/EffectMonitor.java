@@ -42,9 +42,9 @@ public class EffectMonitor implements ClientModInitializer {
 							client.inGameHud.setSubtitle(Text.literal(formattedName + " ends in " + threshold + "s"));
 							client.inGameHud.setTitleTicks(10, 40, 10);
 
-
 							// ✅ Play appropriate sound
-							player.playSound(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0F, 1.0F);
+							player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BASEDRUM.value(), 4.0F, 1.0F);
+
 
 							// Cache that we've already shown this alert
 							playerAlerts.computeIfAbsent(effectName, k -> new HashSet<>()).add(threshold);
