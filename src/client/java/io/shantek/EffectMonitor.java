@@ -100,7 +100,7 @@ public class EffectMonitor implements ClientModInitializer {
 
 
 						if (currentMode == DisplayMode.TITLE) {
-							client.inGameHud.setTitle(Text.literal("⏳ Effect Fading"));
+							client.inGameHud.setTitle(Text.literal("\\uE001\" + \" Effect Fading"));
 							client.inGameHud.setSubtitle(Text.literal(formattedName + " ends in " + threshold + "s"));
 							client.inGameHud.setTitleTicks(10, 40, 10);
 						} else {
