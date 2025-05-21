@@ -70,7 +70,7 @@ public class EffectMonitor implements ClientModInitializer {
 				}
 			}
 
-			if (!notificationsEnabled || client.player == null) return;
+			if (client.player == null) return;
 
 			ClientPlayerEntity player = client.player;
 			UUID uuid = player.getUuid();
@@ -89,14 +89,24 @@ public class EffectMonitor implements ClientModInitializer {
 
 				Set<Integer> alertedThresholds = playerAlerts.computeIfAbsent(effectName, k -> new HashSet<>());
 
-				// Reset if effect was reapplied (e.g., drank a new potion)
+				// Reset alerts if the effect was reapplied with more time
 				int previousLowest = alertedThresholds.stream().min(Integer::compare).orElse(Integer.MAX_VALUE);
 				if (secondsLeft > previousLowest) {
 					alertedThresholds.clear();
 				}
 
 				for (int threshold : thresholds) {
-					if (!alertedThresholds.contains(threshold) && secondsLeft <= threshold) {
+					if (secondsLeft < threshold) {
+						// If we're already past the threshold, mark it as alerted silently
+						alertedThresholds.add(threshold);
+						continue;
+					}
+
+					if (!alertedThresholds.contains(threshold) && secondsLeft == threshold) {
+						alertedThresholds.add(threshold);
+
+						if (!notificationsEnabled) continue;
+
 						String formattedName = effectName.isEmpty()
 								? "Unknown"
 								: Arrays.stream(effectName.replace("_", " ").split(" "))
@@ -104,7 +114,9 @@ public class EffectMonitor implements ClientModInitializer {
 								.map(w -> Character.toUpperCase(w.charAt(0)) + w.substring(1))
 								.collect(Collectors.joining(" "));
 
-						String timeText = threshold >= 60 ? (threshold / 60) + "m" + (threshold % 60 > 0 ? " " + (threshold % 60) + "s" : "") : threshold + "s";
+						String timeText = secondsLeft >= 60
+								? (secondsLeft / 60) + "m" + (secondsLeft % 60 > 0 ? " " + (secondsLeft % 60) + "s" : "")
+								: secondsLeft + "s";
 
 						if (currentMode == DisplayMode.TITLE) {
 							client.inGameHud.setTitle(Text.literal("⏳ Effect Fading"));
@@ -117,16 +129,14 @@ public class EffectMonitor implements ClientModInitializer {
 						if (soundEnabled) {
 							player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BASEDRUM.value(), 4.0F, 1.0F);
 						}
-
-						alertedThresholds.add(threshold);
 					}
 				}
-
 			}
 
+			// Remove alerts for effects that are no longer active
 			playerAlerts.entrySet().removeIf(entry ->
 					player.getStatusEffects().stream().noneMatch(effect ->
-							effect.getTranslationKey().replace("effect.minecraft.", "").equals(entry.getKey())));
+							effect.getEffectType().value().getTranslationKey().replace("effect.minecraft.", "").equals(entry.getKey())));
 		});
 	}
 
