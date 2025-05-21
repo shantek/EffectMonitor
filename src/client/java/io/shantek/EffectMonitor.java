@@ -78,18 +78,25 @@ public class EffectMonitor implements ClientModInitializer {
 			Map<String, Set<Integer>> playerAlerts = alerted.computeIfAbsent(uuid, k -> new HashMap<>());
 
 			for (StatusEffectInstance effect : player.getStatusEffects()) {
-				StatusEffect effectType = getStatusEffect(effect);
-				if (effectType == null) continue;
+				StatusEffect effectType = effect.getEffectType().value();
 
 				StatusEffectCategory category = effectType.getCategory();
 				if (effectFilter == EffectFilter.POSITIVE && category != StatusEffectCategory.BENEFICIAL) continue;
 				if (effectFilter == EffectFilter.NEGATIVE && category != StatusEffectCategory.HARMFUL) continue;
 
 				int secondsLeft = effect.getDuration() / 20;
-				String effectName = effect.getTranslationKey().replace("effect.minecraft.", "");
+				String effectName = effectType.getTranslationKey().replace("effect.minecraft.", "");
+
+				Set<Integer> alertedThresholds = playerAlerts.computeIfAbsent(effectName, k -> new HashSet<>());
+
+				// Reset if effect was reapplied (e.g., drank a new potion)
+				int previousLowest = alertedThresholds.stream().min(Integer::compare).orElse(Integer.MAX_VALUE);
+				if (secondsLeft > previousLowest) {
+					alertedThresholds.clear();
+				}
 
 				for (int threshold : thresholds) {
-					if (secondsLeft == threshold && !playerAlerts.getOrDefault(effectName, new HashSet<>()).contains(threshold)) {
+					if (!alertedThresholds.contains(threshold) && secondsLeft <= threshold) {
 						String formattedName = effectName.isEmpty()
 								? "Unknown"
 								: Arrays.stream(effectName.replace("_", " ").split(" "))
@@ -111,9 +118,10 @@ public class EffectMonitor implements ClientModInitializer {
 							player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BASEDRUM.value(), 4.0F, 1.0F);
 						}
 
-						playerAlerts.computeIfAbsent(effectName, k -> new HashSet<>()).add(threshold);
+						alertedThresholds.add(threshold);
 					}
 				}
+
 			}
 
 			playerAlerts.entrySet().removeIf(entry ->
@@ -140,7 +148,7 @@ public class EffectMonitor implements ClientModInitializer {
 						if (!thresholds.contains(val)) thresholds.add(val);
 					} catch (NumberFormatException ignored) {}
 				}
-				thresholds.sort(Collections.reverseOrder());
+				Collections.sort(thresholds);
 			} catch (IOException ignored) {}
 		}
 	}
@@ -156,17 +164,6 @@ public class EffectMonitor implements ClientModInitializer {
 			props.setProperty("thresholds", thresholds.stream().map(Object::toString).collect(Collectors.joining(",")));
 			props.store(new FileWriter(configFile), "Effect Monitor Config");
 		} catch (IOException ignored) {}
-	}
-
-	private StatusEffect getStatusEffect(StatusEffectInstance instance) {
-		try {
-			Method getEffectType = StatusEffectInstance.class.getDeclaredMethod("getEffectType");
-			getEffectType.setAccessible(true);
-			return (StatusEffect) getEffectType.invoke(instance);
-		} catch (Exception e) {
-			e.printStackTrace();
-			return null;
-		}
 	}
 
 	private class ConfigScreen extends Screen {
@@ -185,26 +182,38 @@ public class EffectMonitor implements ClientModInitializer {
 		@Override
 		protected void init() {
 			int centerX = this.width / 2;
-			int centerY = this.height / 2;
+			int topY = 35; // less top padding for the whole content
 
+			// Title is rendered in render(), this is control section now
+			int buttonHeight = 20;
+			int lineSpacing = 25;
+			int sectionY = topY;
+
+			// Mode toggle
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Mode: " + currentMode), button -> {
 				currentMode = (currentMode == DisplayMode.TITLE) ? DisplayMode.ACTIONBAR : DisplayMode.TITLE;
 				saveSettings();
 				button.setMessage(Text.literal("Mode: " + currentMode));
-			}).dimensions(centerX - 100, centerY - 80, 200, 20).build());
+			}).dimensions(centerX - 100, sectionY, 200, buttonHeight).build());
+			sectionY += lineSpacing;
 
+			// Sound toggle
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Sound: " + (soundEnabled ? "On" : "Off")), button -> {
 				soundEnabled = !soundEnabled;
 				saveSettings();
 				button.setMessage(Text.literal("Sound: " + (soundEnabled ? "On" : "Off")));
-			}).dimensions(centerX - 100, centerY - 50, 200, 20).build());
+			}).dimensions(centerX - 100, sectionY, 200, buttonHeight).build());
+			sectionY += lineSpacing;
 
+			// Notifications toggle
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Notifications: " + (notificationsEnabled ? "Enabled" : "Disabled")), button -> {
 				notificationsEnabled = !notificationsEnabled;
 				saveSettings();
 				button.setMessage(Text.literal("Notifications: " + (notificationsEnabled ? "Enabled" : "Disabled")));
-			}).dimensions(centerX - 100, centerY - 20, 200, 20).build());
+			}).dimensions(centerX - 100, sectionY, 200, buttonHeight).build());
+			sectionY += lineSpacing;
 
+			// Effect filter toggle
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Effects Shown: " + formatEffectFilter(effectFilter)), button -> {
 				switch (effectFilter) {
 					case ALL -> effectFilter = EffectFilter.POSITIVE;
@@ -213,16 +222,19 @@ public class EffectMonitor implements ClientModInitializer {
 				}
 				saveSettings();
 				button.setMessage(Text.literal("Effects Shown: " + formatEffectFilter(effectFilter)));
-			}).dimensions(centerX - 100, centerY + 10, 200, 20).build());
+			}).dimensions(centerX - 100, sectionY, 200, buttonHeight).build());
+			sectionY += lineSpacing + 10;
 
-
-			int y = centerY + 60;
+			// Threshold buttons centered
 			for (int i = 0; i < thresholds.size(); i++) {
 				final int index = i;
 				int threshold = thresholds.get(index);
-				int posY = y + i * 25;
+				int posY = sectionY + i * lineSpacing;
 
-				// -5 button
+				String formatted = threshold >= 60
+						? (threshold / 60) + "m" + (threshold % 60 > 0 ? " " + (threshold % 60) + "s" : "")
+						: threshold + "s";
+
 				this.addDrawableChild(ButtonWidget.builder(Text.literal("-"), b -> {
 							int newVal = threshold - 5;
 							if (newVal >= 5 && !thresholds.contains(newVal)) {
@@ -231,18 +243,12 @@ public class EffectMonitor implements ClientModInitializer {
 								saveSettings();
 								MinecraftClient.getInstance().setScreen(new ConfigScreen());
 							}
-						}).dimensions(centerX - 120, posY, 20, 20)
+						}).dimensions(centerX - 70, posY, 20, 20)
 						.tooltip(Tooltip.of(Text.literal("Decrease by 5s"))).build());
 
-				String formatted = threshold >= 60
-						? (threshold / 60) + "m" + (threshold % 60 > 0 ? " " + (threshold % 60) + "s" : "")
-						: threshold + "s";
-
 				this.addDrawableChild(ButtonWidget.builder(Text.literal(formatted), b -> {})
-						.dimensions(centerX - 95, posY, 110, 20).build());
+						.dimensions(centerX - 45, posY, 90, 20).build());
 
-
-				// +5 button
 				this.addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> {
 							int newVal = threshold + 5;
 							if (newVal <= 240 && !thresholds.contains(newVal)) {
@@ -251,21 +257,21 @@ public class EffectMonitor implements ClientModInitializer {
 								saveSettings();
 								MinecraftClient.getInstance().setScreen(new ConfigScreen());
 							}
-						}).dimensions(centerX + 20, posY, 20, 20)
+						}).dimensions(centerX + 50, posY, 20, 20)
 						.tooltip(Tooltip.of(Text.literal("Increase by 5s"))).build());
 
-				// Delete button
 				if (thresholds.size() > 1) {
 					this.addDrawableChild(ButtonWidget.builder(Text.literal("✕"), b -> {
 								thresholds.remove(index);
 								thresholds.sort(Collections.reverseOrder());
 								saveSettings();
 								MinecraftClient.getInstance().setScreen(new ConfigScreen());
-							}).dimensions(centerX + 45, posY, 20, 20)
+							}).dimensions(centerX + 75, posY, 20, 20)
 							.tooltip(Tooltip.of(Text.literal("Remove this threshold"))).build());
 				}
 			}
 
+			// Add button
 			if (thresholds.size() < 3) {
 				this.addDrawableChild(ButtonWidget.builder(Text.literal("+ Add Threshold"), b -> {
 							int candidate = 5;
@@ -276,12 +282,13 @@ public class EffectMonitor implements ClientModInitializer {
 								saveSettings();
 								MinecraftClient.getInstance().setScreen(new ConfigScreen());
 							}
-						}).dimensions(centerX - 100, y + thresholds.size() * 25, 200, 20)
+						}).dimensions(centerX - 100, sectionY + thresholds.size() * lineSpacing, 200, 20)
 						.tooltip(Tooltip.of(Text.literal("Add a new threshold (max 3)"))).build());
 			}
 
+			// Close button
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Close"), button -> this.close())
-					.dimensions(centerX - 100, y + thresholds.size() * 25 + 30, 200, 20).build());
+					.dimensions(centerX - 100, sectionY + thresholds.size() * lineSpacing + 30, 200, 20).build());
 		}
 
 		private String formatEffectFilter(EffectFilter filter) {
