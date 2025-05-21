@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -19,6 +20,7 @@ import org.lwjgl.glfw.GLFW;
 import java.io.*;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class EffectMonitor implements ClientModInitializer {
 
@@ -36,11 +38,7 @@ public class EffectMonitor implements ClientModInitializer {
 	private boolean notificationsEnabled = true;
 
 	private final Map<UUID, Map<String, Set<Integer>>> alerted = new HashMap<>();
-	private final Map<String, Integer> thresholds = Map.of(
-			"60", 60,
-			"30", 30,
-			"5", 5
-	);
+	private final List<Integer> thresholds = new ArrayList<>(List.of(60, 30, 5));
 
 	private KeyBinding openConfigKey;
 	private KeyBinding toggleNotificationsKey;
@@ -52,7 +50,7 @@ public class EffectMonitor implements ClientModInitializer {
 		loadSettings();
 
 		openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-				"key.effectmonitor.config", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, "Effect Monitor"
+				"key.effectmonitor.config", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, "Effect Monitor"
 		));
 
 		toggleNotificationsKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -80,31 +78,33 @@ public class EffectMonitor implements ClientModInitializer {
 			Map<String, Set<Integer>> playerAlerts = alerted.computeIfAbsent(uuid, k -> new HashMap<>());
 
 			for (StatusEffectInstance effect : player.getStatusEffects()) {
-
 				StatusEffect effectType = getStatusEffect(effect);
 				if (effectType == null) continue;
 
 				StatusEffectCategory category = effectType.getCategory();
-
 				if (effectFilter == EffectFilter.POSITIVE && category != StatusEffectCategory.BENEFICIAL) continue;
 				if (effectFilter == EffectFilter.NEGATIVE && category != StatusEffectCategory.HARMFUL) continue;
 
 				int secondsLeft = effect.getDuration() / 20;
 				String effectName = effect.getTranslationKey().replace("effect.minecraft.", "");
 
-				for (int threshold : thresholds.values()) {
+				for (int threshold : thresholds) {
 					if (secondsLeft == threshold && !playerAlerts.getOrDefault(effectName, new HashSet<>()).contains(threshold)) {
 						String formattedName = effectName.isEmpty()
 								? "Unknown"
-								: Character.toUpperCase(effectName.charAt(0)) + effectName.substring(1);
+								: Arrays.stream(effectName.replace("_", " ").split(" "))
+								.filter(w -> !w.isEmpty())
+								.map(w -> Character.toUpperCase(w.charAt(0)) + w.substring(1))
+								.collect(Collectors.joining(" "));
 
+						String timeText = threshold >= 60 ? (threshold / 60) + "m" + (threshold % 60 > 0 ? " " + (threshold % 60) + "s" : "") : threshold + "s";
 
 						if (currentMode == DisplayMode.TITLE) {
-							client.inGameHud.setTitle(Text.literal("\\uE001\" + \" Effect Fading"));
-							client.inGameHud.setSubtitle(Text.literal(formattedName + " ends in " + threshold + "s"));
+							client.inGameHud.setTitle(Text.literal("⏳ Effect Fading"));
+							client.inGameHud.setSubtitle(Text.literal(formattedName + " ends in " + timeText));
 							client.inGameHud.setTitleTicks(10, 40, 10);
 						} else {
-							player.sendMessage(Text.literal("⏳ " + formattedName + " ends in " + threshold + "s"), true);
+							player.sendMessage(Text.literal("⏳ " + formattedName + " ends in " + timeText), true);
 						}
 
 						if (soundEnabled) {
@@ -118,8 +118,7 @@ public class EffectMonitor implements ClientModInitializer {
 
 			playerAlerts.entrySet().removeIf(entry ->
 					player.getStatusEffects().stream().noneMatch(effect ->
-							effect.getTranslationKey().replace("effect.minecraft.", "").equals(entry.getKey()))
-			);
+							effect.getTranslationKey().replace("effect.minecraft.", "").equals(entry.getKey())));
 		});
 	}
 
@@ -132,8 +131,31 @@ public class EffectMonitor implements ClientModInitializer {
 				soundEnabled = Boolean.parseBoolean(props.getProperty("sound", "true"));
 				notificationsEnabled = Boolean.parseBoolean(props.getProperty("enabled", "true"));
 				effectFilter = EffectFilter.valueOf(props.getProperty("effectFilter", "ALL"));
+
+				String thresholdStr = props.getProperty("thresholds", "60,30,5");
+				thresholds.clear();
+				for (String s : thresholdStr.split(",")) {
+					try {
+						int val = Integer.parseInt(s.trim());
+						if (!thresholds.contains(val)) thresholds.add(val);
+					} catch (NumberFormatException ignored) {}
+				}
+				thresholds.sort(Collections.reverseOrder());
 			} catch (IOException ignored) {}
 		}
+	}
+
+	private void saveSettings() {
+		try {
+			configFile.getParentFile().mkdirs();
+			Properties props = new Properties();
+			props.setProperty("mode", currentMode.name());
+			props.setProperty("sound", Boolean.toString(soundEnabled));
+			props.setProperty("enabled", Boolean.toString(notificationsEnabled));
+			props.setProperty("effectFilter", effectFilter.name());
+			props.setProperty("thresholds", thresholds.stream().map(Object::toString).collect(Collectors.joining(",")));
+			props.store(new FileWriter(configFile), "Effect Monitor Config");
+		} catch (IOException ignored) {}
 	}
 
 	private StatusEffect getStatusEffect(StatusEffectInstance instance) {
@@ -147,26 +169,17 @@ public class EffectMonitor implements ClientModInitializer {
 		}
 	}
 
-	private void saveSettings() {
-		try {
-			configFile.getParentFile().mkdirs();
-			Properties props = new Properties();
-			props.setProperty("mode", currentMode.name());
-			props.setProperty("sound", Boolean.toString(soundEnabled));
-			props.setProperty("enabled", Boolean.toString(notificationsEnabled));
-			props.setProperty("effectFilter", effectFilter.name());
-			props.store(new FileWriter(configFile), "Effect Monitor Config");
-		} catch (IOException ignored) {}
-	}
-
 	private class ConfigScreen extends Screen {
-		private ButtonWidget displayToggleButton;
-		private ButtonWidget soundToggleButton;
-		private ButtonWidget enabledToggleButton;
-		private ButtonWidget filterToggleButton;
-
 		protected ConfigScreen() {
 			super(Text.literal("Effect Monitor Config"));
+		}
+
+		@Override
+		public void render(net.minecraft.client.gui.DrawContext context, int mouseX, int mouseY, float delta) {
+			super.render(context, mouseX, mouseY, delta);
+
+			context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§lEffect Monitor"), this.width / 2, 15, 0xFFFFFF);
+
 		}
 
 		@Override
@@ -174,64 +187,113 @@ public class EffectMonitor implements ClientModInitializer {
 			int centerX = this.width / 2;
 			int centerY = this.height / 2;
 
-			displayToggleButton = ButtonWidget.builder(getDisplayModeText(), button -> {
+			this.addDrawableChild(ButtonWidget.builder(Text.literal("Mode: " + currentMode), button -> {
 				currentMode = (currentMode == DisplayMode.TITLE) ? DisplayMode.ACTIONBAR : DisplayMode.TITLE;
 				saveSettings();
-				button.setMessage(getDisplayModeText());
-			}).dimensions(centerX - 100, centerY - 70, 200, 20).build();
-			this.addDrawableChild(displayToggleButton);
+				button.setMessage(Text.literal("Mode: " + currentMode));
+			}).dimensions(centerX - 100, centerY - 80, 200, 20).build());
 
-			soundToggleButton = ButtonWidget.builder(getSoundToggleText(), button -> {
+			this.addDrawableChild(ButtonWidget.builder(Text.literal("Sound: " + (soundEnabled ? "On" : "Off")), button -> {
 				soundEnabled = !soundEnabled;
 				saveSettings();
-				button.setMessage(getSoundToggleText());
-			}).dimensions(centerX - 100, centerY - 40, 200, 20).build();
-			this.addDrawableChild(soundToggleButton);
+				button.setMessage(Text.literal("Sound: " + (soundEnabled ? "On" : "Off")));
+			}).dimensions(centerX - 100, centerY - 50, 200, 20).build());
 
-			enabledToggleButton = ButtonWidget.builder(getEnabledToggleText(), button -> {
+			this.addDrawableChild(ButtonWidget.builder(Text.literal("Notifications: " + (notificationsEnabled ? "Enabled" : "Disabled")), button -> {
 				notificationsEnabled = !notificationsEnabled;
 				saveSettings();
-				button.setMessage(getEnabledToggleText());
-			}).dimensions(centerX - 100, centerY - 10, 200, 20).build();
-			this.addDrawableChild(enabledToggleButton);
+				button.setMessage(Text.literal("Notifications: " + (notificationsEnabled ? "Enabled" : "Disabled")));
+			}).dimensions(centerX - 100, centerY - 20, 200, 20).build());
 
-			filterToggleButton = ButtonWidget.builder(getFilterToggleText(), button -> {
+			this.addDrawableChild(ButtonWidget.builder(Text.literal("Effects Shown: " + formatEffectFilter(effectFilter)), button -> {
 				switch (effectFilter) {
 					case ALL -> effectFilter = EffectFilter.POSITIVE;
 					case POSITIVE -> effectFilter = EffectFilter.NEGATIVE;
 					case NEGATIVE -> effectFilter = EffectFilter.ALL;
 				}
 				saveSettings();
-				button.setMessage(getFilterToggleText());
-			}).dimensions(centerX - 100, centerY + 20, 200, 20).build();
-			this.addDrawableChild(filterToggleButton);
+				button.setMessage(Text.literal("Effects Shown: " + formatEffectFilter(effectFilter)));
+			}).dimensions(centerX - 100, centerY + 10, 200, 20).build());
+
+
+			int y = centerY + 60;
+			for (int i = 0; i < thresholds.size(); i++) {
+				final int index = i;
+				int threshold = thresholds.get(index);
+				int posY = y + i * 25;
+
+				// -5 button
+				this.addDrawableChild(ButtonWidget.builder(Text.literal("-"), b -> {
+							int newVal = threshold - 5;
+							if (newVal >= 5 && !thresholds.contains(newVal)) {
+								thresholds.set(index, newVal);
+								thresholds.sort(Collections.reverseOrder());
+								saveSettings();
+								MinecraftClient.getInstance().setScreen(new ConfigScreen());
+							}
+						}).dimensions(centerX - 120, posY, 20, 20)
+						.tooltip(Tooltip.of(Text.literal("Decrease by 5s"))).build());
+
+				String formatted = threshold >= 60
+						? (threshold / 60) + "m" + (threshold % 60 > 0 ? " " + (threshold % 60) + "s" : "")
+						: threshold + "s";
+
+				this.addDrawableChild(ButtonWidget.builder(Text.literal(formatted), b -> {})
+						.dimensions(centerX - 95, posY, 110, 20).build());
+
+
+				// +5 button
+				this.addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> {
+							int newVal = threshold + 5;
+							if (newVal <= 240 && !thresholds.contains(newVal)) {
+								thresholds.set(index, newVal);
+								thresholds.sort(Collections.reverseOrder());
+								saveSettings();
+								MinecraftClient.getInstance().setScreen(new ConfigScreen());
+							}
+						}).dimensions(centerX + 20, posY, 20, 20)
+						.tooltip(Tooltip.of(Text.literal("Increase by 5s"))).build());
+
+				// Delete button
+				if (thresholds.size() > 1) {
+					this.addDrawableChild(ButtonWidget.builder(Text.literal("✕"), b -> {
+								thresholds.remove(index);
+								thresholds.sort(Collections.reverseOrder());
+								saveSettings();
+								MinecraftClient.getInstance().setScreen(new ConfigScreen());
+							}).dimensions(centerX + 45, posY, 20, 20)
+							.tooltip(Tooltip.of(Text.literal("Remove this threshold"))).build());
+				}
+			}
+
+			if (thresholds.size() < 3) {
+				this.addDrawableChild(ButtonWidget.builder(Text.literal("+ Add Threshold"), b -> {
+							int candidate = 5;
+							while (thresholds.contains(candidate)) candidate += 5;
+							if (candidate <= 240) {
+								thresholds.add(candidate);
+								thresholds.sort(Collections.reverseOrder());
+								saveSettings();
+								MinecraftClient.getInstance().setScreen(new ConfigScreen());
+							}
+						}).dimensions(centerX - 100, y + thresholds.size() * 25, 200, 20)
+						.tooltip(Tooltip.of(Text.literal("Add a new threshold (max 3)"))).build());
+			}
 
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Close"), button -> this.close())
-					.dimensions(centerX - 100, centerY + 50, 200, 20).build());
+					.dimensions(centerX - 100, y + thresholds.size() * 25 + 30, 200, 20).build());
 		}
 
-		private Text getDisplayModeText() {
-			return Text.literal("Mode: " + (currentMode == DisplayMode.TITLE ? "Title" : "Actionbar"));
+		private String formatEffectFilter(EffectFilter filter) {
+			String name = filter.name().toLowerCase();
+			return Character.toUpperCase(name.charAt(0)) + name.substring(1);
 		}
 
-		private Text getSoundToggleText() {
-			return Text.literal("Sound: " + (soundEnabled ? "On" : "Off"));
-		}
-
-		private Text getEnabledToggleText() {
-			return Text.literal("Notifications: " + (notificationsEnabled ? "Enabled" : "Disabled"));
-		}
-
-		private Text getFilterToggleText() {
-			return Text.literal("Effects Shown: " + switch (effectFilter) {
-				case ALL -> "All";
-				case POSITIVE -> "Positive Only";
-				case NEGATIVE -> "Negative Only";
-			});
-		}
 
 		@Override
 		public boolean shouldPause() {
 			return false;
 		}
 	}
+
+}
