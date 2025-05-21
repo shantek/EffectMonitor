@@ -9,12 +9,15 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.entity.effect.StatusEffect;
+import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.*;
+import java.lang.reflect.Method;
 import java.util.*;
 
 public class EffectMonitor implements ClientModInitializer {
@@ -23,7 +26,12 @@ public class EffectMonitor implements ClientModInitializer {
 		TITLE, ACTIONBAR
 	}
 
+	enum EffectFilter {
+		ALL, POSITIVE, NEGATIVE
+	}
+
 	private DisplayMode currentMode = DisplayMode.ACTIONBAR;
+	private EffectFilter effectFilter = EffectFilter.ALL;
 	private boolean soundEnabled = true;
 	private boolean notificationsEnabled = true;
 
@@ -72,12 +80,24 @@ public class EffectMonitor implements ClientModInitializer {
 			Map<String, Set<Integer>> playerAlerts = alerted.computeIfAbsent(uuid, k -> new HashMap<>());
 
 			for (StatusEffectInstance effect : player.getStatusEffects()) {
+
+				StatusEffect effectType = getStatusEffect(effect);
+				if (effectType == null) continue;
+
+				StatusEffectCategory category = effectType.getCategory();
+
+				if (effectFilter == EffectFilter.POSITIVE && category != StatusEffectCategory.BENEFICIAL) continue;
+				if (effectFilter == EffectFilter.NEGATIVE && category != StatusEffectCategory.HARMFUL) continue;
+
 				int secondsLeft = effect.getDuration() / 20;
 				String effectName = effect.getTranslationKey().replace("effect.minecraft.", "");
 
 				for (int threshold : thresholds.values()) {
 					if (secondsLeft == threshold && !playerAlerts.getOrDefault(effectName, new HashSet<>()).contains(threshold)) {
-						String formattedName = effectName.substring(0, 1).toUpperCase() + effectName.substring(1);
+						String formattedName = effectName.isEmpty()
+								? "Unknown"
+								: Character.toUpperCase(effectName.charAt(0)) + effectName.substring(1);
+
 
 						if (currentMode == DisplayMode.TITLE) {
 							client.inGameHud.setTitle(Text.literal("⏳ Effect Fading"));
@@ -111,7 +131,19 @@ public class EffectMonitor implements ClientModInitializer {
 				currentMode = DisplayMode.valueOf(props.getProperty("mode", "ACTIONBAR"));
 				soundEnabled = Boolean.parseBoolean(props.getProperty("sound", "true"));
 				notificationsEnabled = Boolean.parseBoolean(props.getProperty("enabled", "true"));
+				effectFilter = EffectFilter.valueOf(props.getProperty("effectFilter", "ALL"));
 			} catch (IOException ignored) {}
+		}
+	}
+
+	private StatusEffect getStatusEffect(StatusEffectInstance instance) {
+		try {
+			Method getEffectType = StatusEffectInstance.class.getDeclaredMethod("getEffectType");
+			getEffectType.setAccessible(true);
+			return (StatusEffect) getEffectType.invoke(instance);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
 		}
 	}
 
@@ -122,13 +154,18 @@ public class EffectMonitor implements ClientModInitializer {
 			props.setProperty("mode", currentMode.name());
 			props.setProperty("sound", Boolean.toString(soundEnabled));
 			props.setProperty("enabled", Boolean.toString(notificationsEnabled));
+			props.setProperty("effectFilter", effectFilter.name());
 			props.store(new FileWriter(configFile), "Effect Monitor Config");
 		} catch (IOException ignored) {}
 	}
 
 	private class ConfigScreen extends Screen {
+		private ButtonWidget displayToggleButton;
+		private ButtonWidget soundToggleButton;
+		private ButtonWidget enabledToggleButton;
+		private ButtonWidget filterToggleButton;
 
-        protected ConfigScreen() {
+		protected ConfigScreen() {
 			super(Text.literal("Effect Monitor Config"));
 		}
 
@@ -137,26 +174,37 @@ public class EffectMonitor implements ClientModInitializer {
 			int centerX = this.width / 2;
 			int centerY = this.height / 2;
 
-            ButtonWidget displayToggleButton = ButtonWidget.builder(getDisplayModeText(), button -> {
-                currentMode = (currentMode == DisplayMode.TITLE) ? DisplayMode.ACTIONBAR : DisplayMode.TITLE;
-                saveSettings();
-                button.setMessage(getDisplayModeText());
-            }).dimensions(centerX - 100, centerY - 50, 200, 20).build();
+			displayToggleButton = ButtonWidget.builder(getDisplayModeText(), button -> {
+				currentMode = (currentMode == DisplayMode.TITLE) ? DisplayMode.ACTIONBAR : DisplayMode.TITLE;
+				saveSettings();
+				button.setMessage(getDisplayModeText());
+			}).dimensions(centerX - 100, centerY - 70, 200, 20).build();
 			this.addDrawableChild(displayToggleButton);
 
-            ButtonWidget soundToggleButton = ButtonWidget.builder(getSoundToggleText(), button -> {
-                soundEnabled = !soundEnabled;
-                saveSettings();
-                button.setMessage(getSoundToggleText());
-            }).dimensions(centerX - 100, centerY - 20, 200, 20).build();
+			soundToggleButton = ButtonWidget.builder(getSoundToggleText(), button -> {
+				soundEnabled = !soundEnabled;
+				saveSettings();
+				button.setMessage(getSoundToggleText());
+			}).dimensions(centerX - 100, centerY - 40, 200, 20).build();
 			this.addDrawableChild(soundToggleButton);
 
-            ButtonWidget enabledToggleButton = ButtonWidget.builder(getEnabledToggleText(), button -> {
-                notificationsEnabled = !notificationsEnabled;
-                saveSettings();
-                button.setMessage(getEnabledToggleText());
-            }).dimensions(centerX - 100, centerY + 10, 200, 20).build();
+			enabledToggleButton = ButtonWidget.builder(getEnabledToggleText(), button -> {
+				notificationsEnabled = !notificationsEnabled;
+				saveSettings();
+				button.setMessage(getEnabledToggleText());
+			}).dimensions(centerX - 100, centerY - 10, 200, 20).build();
 			this.addDrawableChild(enabledToggleButton);
+
+			filterToggleButton = ButtonWidget.builder(getFilterToggleText(), button -> {
+				switch (effectFilter) {
+					case ALL -> effectFilter = EffectFilter.POSITIVE;
+					case POSITIVE -> effectFilter = EffectFilter.NEGATIVE;
+					case NEGATIVE -> effectFilter = EffectFilter.ALL;
+				}
+				saveSettings();
+				button.setMessage(getFilterToggleText());
+			}).dimensions(centerX - 100, centerY + 20, 200, 20).build();
+			this.addDrawableChild(filterToggleButton);
 
 			this.addDrawableChild(ButtonWidget.builder(Text.literal("Close"), button -> this.close())
 					.dimensions(centerX - 100, centerY + 50, 200, 20).build());
@@ -174,9 +222,16 @@ public class EffectMonitor implements ClientModInitializer {
 			return Text.literal("Notifications: " + (notificationsEnabled ? "Enabled" : "Disabled"));
 		}
 
+		private Text getFilterToggleText() {
+			return Text.literal("Effects Shown: " + switch (effectFilter) {
+				case ALL -> "All";
+				case POSITIVE -> "Positive Only";
+				case NEGATIVE -> "Negative Only";
+			});
+		}
+
 		@Override
 		public boolean shouldPause() {
 			return false;
 		}
 	}
-}
