@@ -1,7 +1,6 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Modrinth](https://img.shields.io/badge/Modrinth-Effect%20Monitor-green?logo=modrinth)](https://modrinth.com/mod/effect-monitor)
 [![Discord](https://img.shields.io/discord/628396916639793152?color=%237289da&label=discord)](https://shantek.co/discord)
-![bStats](https://bstats.org/signatures/bukkit/Effect%20Monitor.svg)
 
 <img src="https://www.shantek.io/wp-content/uploads/2024/05/effect-monitor-banner.png" alt="Effect Monitor Banner" />
 
