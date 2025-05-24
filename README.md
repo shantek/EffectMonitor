@@ -82,5 +82,5 @@ If you love this mod and want to support continued updates and new features:
 
 ## 📄 License
 
-This project is licensed under the **MIT License**.  
+This project is licensed under the **GPL License**.  
 See [`LICENSE`](LICENSE) for full details.
