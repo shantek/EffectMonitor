@@ -48,10 +48,12 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build
 
-      - name: Rename output jar to include build number
+      - name: Rename main mod jar to standard name
         run: |
-          JAR=$(ls build/libs/*.jar | head -n 1)
-          OUT="build/libs/$(basename "$JAR" .jar)-build-${{ env.BUILD_NUMBER }}.jar"
+          BUILD_NUMBER=${{ env.BUILD_NUMBER }}
+          MOD_NAME="EffectMonitor"
+          JAR=$(find build/libs -maxdepth 1 -type f -iname "${MOD_NAME}-*.jar" ! -iname "*-sources.jar" ! -iname "*-dev.jar" | head -n 1)
+          OUT="build/libs/${MOD_NAME}-build-${BUILD_NUMBER}.jar"
           mv "$JAR" "$OUT"
           echo "FINAL_JAR=$OUT" >> $GITHUB_ENV
 
@@ -82,7 +84,7 @@ jobs:
           FILENAME=$(basename "${{ env.FINAL_JAR }}")
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/build-${BUILD_NUMBER}/$FILENAME"
           JSON_PAYLOAD=$(jq -n \
-            --arg title "FabricMod - Release #$BUILD_NUMBER" \
+            --arg title "EffectMonitor - Release #$BUILD_NUMBER" \
             --arg desc "${{ env.CHANGELOG }}" \
             --arg url "https://github.com/${{ github.repository }}/releases/tag/build-${BUILD_NUMBER}" \
             --arg download "$DOWNLOAD_URL" \
