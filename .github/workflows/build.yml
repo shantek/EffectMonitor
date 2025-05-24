@@ -1,30 +1,115 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
+name: Dev Build on Build Number Bump
 
-name: build
-on: [pull_request, push]
+on:
+  push:
+    branches: [master]
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+
     steps:
-      - name: checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: validate gradle wrapper
+
+      - name: Read build number
+        run: |
+          BUILD=$(cat build.number)
+          echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
+
+      - name: Check if release already exists
+        run: |
+          EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/tags/build-${{ env.BUILD_NUMBER }} | jq -r '.id // empty')
+          if [[ -n "$EXISTS" ]]; then
+            echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Stop if already released
+        if: env.RELEASE_EXISTS == 'true'
+        run: |
+          echo "Build #${{ env.BUILD_NUMBER }} already released. Skipping."
+          exit 0
+
+      - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
-      - name: setup jdk
+
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'microsoft'
-      - name: make gradle wrapper executable
+
+      - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: build
+
+      - name: Build with Gradle
         run: ./gradlew build
-      - name: capture build artifacts
-        uses: actions/upload-artifact@v4
+
+      - name: Rename output jar to include build number
+        run: |
+          JAR=$(ls build/libs/*.jar | head -n 1)
+          OUT="build/libs/$(basename "$JAR" .jar)-build-${{ env.BUILD_NUMBER }}.jar"
+          mv "$JAR" "$OUT"
+          echo "FINAL_JAR=$OUT" >> $GITHUB_ENV
+
+      - name: Generate changelog
+        run: |
+          git fetch --tags
+          LAST_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1) || echo "")
+          LOG=$(git log $LAST_TAG..HEAD --pretty=format:"- %s")
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$LOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: Artifacts
-          path: build/libs/
+          tag_name: build-${{ env.BUILD_NUMBER }}
+          name: Release ${{ env.BUILD_NUMBER }}
+          body: ${{ env.CHANGELOG }}
+          draft: false
+          prerelease: false
+          files: ${{ env.FINAL_JAR }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Notify Discord
+        run: |
+          BUILD_NUMBER=${{ env.BUILD_NUMBER }}
+          FILENAME=$(basename "${{ env.FINAL_JAR }}")
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/build-${BUILD_NUMBER}/$FILENAME"
+          JSON_PAYLOAD=$(jq -n \
+            --arg title "FabricMod - Release #$BUILD_NUMBER" \
+            --arg desc "${{ env.CHANGELOG }}" \
+            --arg url "https://github.com/${{ github.repository }}/releases/tag/build-${BUILD_NUMBER}" \
+            --arg download "$DOWNLOAD_URL" \
+            --arg filename "$FILENAME" \
+            --arg thumb "https://cdn.modrinth.com/data/EO7yscjI/6db883d7010e8b5902f4a43446058f1d9a7c930a_96.webp" \
+            '{
+              "embeds": [{
+                "title": $title,
+                "url": $url,
+                "description": $desc,
+                "color": 7506394,
+                "fields": [
+                  {
+                    "name": "Download",
+                    "value": "[\($filename)](\($download))"
+                  },
+                  {
+                    "name": "Releases",
+                    "value": "[View All Releases](https://www.github.com/${{ github.repository }}/releases)"
+                  }
+                ],
+                "thumbnail": { "url": $thumb },
+                "footer": { "text": "Shantek • GitHub Release" },
+                "timestamp": (now | todate)
+              }]
+            }')
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "$JSON_PAYLOAD" \
+               ${{ secrets.DISCORD_WEBHOOK_URL }}
