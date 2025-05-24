@@ -1,4 +1,4 @@
-[![License: MIT](https://img.shields.io/badge[![License: GPL](https://img.shields.io/badge/license-GPL-blue.svg)](LICENSE)
+[![License: GPL](https://img.shields.io/badge/license-GPL-blue.svg)](LICENSE)
 [![Modrinth](https://img.shields.io/badge/Modrinth-Effect%20Monitor-green?logo=modrinth)](https://modrinth.com/mod/effect-monitor)
 [![Discord](https://img.shields.io/discord/628396916639793152?color=%237289da&label=discord)](https://shantek.co/discord)
 
