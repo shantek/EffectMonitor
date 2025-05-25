@@ -1,9 +1,14 @@
-[![License: GPL](https://img.shields.io/badge/license-GPL-blue.svg)](LICENSE)
+# ![Shantek Banner](/.github/assets/Banner.png)
+
+---
+
+
 [![Modrinth](https://img.shields.io/badge/Modrinth-Effect%20Monitor-green?logo=modrinth)](https://modrinth.com/mod/effect-monitor)
 [![Discord](https://img.shields.io/discord/628396916639793152?color=%237289da&label=discord)](https://shantek.co/discord)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/shantek/EffectMonitor)
+![GitHub Created At](https://img.shields.io/github/created-at/shantek/EffectMonitor)
 
-<img src="https://www.shantek.io/wp-content/uploads/2024/05/effect-monitor-banner.png" alt="Effect Monitor Banner" />
-
+# ![Effect Monitor](/.github/assets/EffectMonitor.png)
 # 🧪 Effect Monitor
 
 **Stay in control of your potion effects.**  
@@ -81,6 +86,8 @@ If you love this mod and want to support continued updates and new features:
 ---
 
 ## 📄 License
+
+[![License: GPL](https://img.shields.io/badge/license-GPL-blue.svg)](LICENSE)
 
 This project is licensed under the **GPL License**.  
 See [`LICENSE`](LICENSE) for full details.
