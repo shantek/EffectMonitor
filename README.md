@@ -3,11 +3,11 @@
 ---
 
 
-[![Modrinth](https://img.shields.io/badge/Modrinth-Effect%20Monitor-green?logo=modrinth)](https://modrinth.com/mod/effect-monitor)
+[![Modrinth](https://img.shields.io/badge/Modrinth-Download-green?logo=modrinth)](https://modrinth.com/mod/effect-monitor)
 [![Discord](https://img.shields.io/discord/628396916639793152?color=%237289da&label=discord)](https://shantek.co/discord)
+[![CodeFactor](https://www.codefactor.io/repository/github/shantek/effectmonitor/badge)](https://www.codefactor.io/repository/github/shantek/effectmonitor)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/shantek/EffectMonitor)
 ![GitHub Created At](https://img.shields.io/github/created-at/shantek/EffectMonitor)
-
 # ![Effect Monitor](/.github/assets/EffectMonitor.png)
 # 🧪 Effect Monitor
 
