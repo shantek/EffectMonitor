@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "effectmonitor",
-	"version": "${version}",
+	"version": "1.0.1",
 	"name": "Effect Monitor",
 	"description": "A lightweight client-side mod that notifies you when your potion effects are about to expire.",
 	"authors": ["Shantek"],
@@ -19,7 +19,7 @@
 	},
 	"depends": {
 		"fabricloader": ">=0.16.10",
-		"minecraft": "~1.21.5",
+		"minecraft": "~1.21.6",
 		"fabric-api": "*"
 	}
 }
