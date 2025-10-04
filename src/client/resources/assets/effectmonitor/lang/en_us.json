@@ -1,5 +1,5 @@
 {
-  "key.effectmonitor.config": "Open Effect Monitor Settings",
-  "key.effectmonitor.toggle": "Toggle Notifications",
-  "category.effectmonitor": "Effect Monitor"
+  "key.categories.effectmonitor": "Effect Monitor",
+  "key.effectmonitor.config": "Open Config Screen",
+  "key.effectmonitor.toggle": "Toggle Notifications"
 }
