@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "effectmonitor",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"name": "Effect Monitor",
 	"description": "A lightweight client-side mod that notifies you when your potion effects are about to expire.",
 	"authors": ["Shantek"],
