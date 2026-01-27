@@ -17,14 +17,19 @@ jobs:
           BUILD=$(cat build.number)
           echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
 
+      # ✅ Reliable release check (private-repo safe)
       - name: Check if release already exists
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/tags/build-${{ env.BUILD_NUMBER }} | jq -r '.id // empty')
-          if [[ -n "$EXISTS" ]]; then
+          TAG="build-${{ env.BUILD_NUMBER }}"
+
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "RELEASE_EXISTS=true" >> $GITHUB_ENV
+            echo "Release $TAG already exists."
           else
             echo "RELEASE_EXISTS=false" >> $GITHUB_ENV
+            echo "No release found. Proceeding."
           fi
 
       - name: Stop if already released
@@ -52,7 +57,12 @@ jobs:
         run: |
           BUILD_NUMBER=${{ env.BUILD_NUMBER }}
           MOD_NAME="EffectMonitor"
-          JAR=$(find build/libs -maxdepth 1 -type f -iname "${MOD_NAME}-*.jar" ! -iname "*-sources.jar" ! -iname "*-dev.jar" | head -n 1)
+
+          JAR=$(find build/libs -maxdepth 1 -type f \
+            -iname "${MOD_NAME}-*.jar" \
+            ! -iname "*-sources.jar" \
+            ! -iname "*-dev.jar" | head -n 1)
+
           OUT="build/libs/${MOD_NAME}-build-${BUILD_NUMBER}.jar"
           mv "$JAR" "$OUT"
           echo "FINAL_JAR=$OUT" >> $GITHUB_ENV
@@ -60,10 +70,9 @@ jobs:
       - name: Generate changelog
         run: |
           git fetch --tags
-          LAST_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1) || echo "")
-          LOG=$(git log $LAST_TAG..HEAD --pretty=format:"- %s")
+          LAST_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
           echo "CHANGELOG<<EOF" >> $GITHUB_ENV
-          echo "$LOG" >> $GITHUB_ENV
+          git log $LAST_TAG..HEAD --pretty=format:"- %s" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Create GitHub Release
@@ -72,19 +81,20 @@ jobs:
           tag_name: build-${{ env.BUILD_NUMBER }}
           name: Release ${{ env.BUILD_NUMBER }}
           body: ${{ env.CHANGELOG }}
-          draft: false
-          prerelease: false
           files: ${{ env.FINAL_JAR }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
+      # 🧯 Discord webhook (non-fatal)
       - name: Notify Discord
+        continue-on-error: true
         run: |
           BUILD_NUMBER=${{ env.BUILD_NUMBER }}
           FILENAME=$(basename "${{ env.FINAL_JAR }}")
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/build-${BUILD_NUMBER}/$FILENAME"
+
           JSON_PAYLOAD=$(jq -n \
-            --arg title "EffectMonitor - Release #$BUILD_NUMBER" \
+            --arg title "EffectMonitor – Release #$BUILD_NUMBER" \
             --arg desc "${{ env.CHANGELOG }}" \
             --arg url "https://github.com/${{ github.repository }}/releases/tag/build-${BUILD_NUMBER}" \
             --arg download "$DOWNLOAD_URL" \
@@ -103,7 +113,7 @@ jobs:
                   },
                   {
                     "name": "Releases",
-                    "value": "[View All Releases](https://www.github.com/${{ github.repository }}/releases)"
+                    "value": "[View All Releases](https://github.com/${{ github.repository }}/releases)"
                   }
                 ],
                 "thumbnail": { "url": $thumb },
@@ -111,10 +121,12 @@ jobs:
                 "timestamp": (now | todate)
               }]
             }')
+
           curl -H "Content-Type: application/json" \
                -X POST \
                -d "$JSON_PAYLOAD" \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
+
       - name: Trigger WordPress GitHub Releases Sync
         run: |
           curl -s -o /dev/null -w "%{http_code}" "${{ secrets.WORDPRESS_SYNC_URL }}"
