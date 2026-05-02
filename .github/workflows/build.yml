@@ -17,7 +17,6 @@ jobs:
           BUILD=$(cat build.number)
           echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
 
-      # ✅ Reliable release check (private-repo safe)
       - name: Check if release already exists
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -44,7 +43,7 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: 'microsoft'
 
       - name: Make Gradle wrapper executable
