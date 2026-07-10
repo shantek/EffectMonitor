@@ -64,7 +64,7 @@ public class EffectMonitor implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openConfigKey.consumeClick()) {
-                client.setScreen(new ConfigScreen());
+                client.gui.setScreen(new ConfigScreen());
             }
 
             while (toggleNotificationsKey.consumeClick()) {
@@ -122,9 +122,9 @@ public class EffectMonitor implements ClientModInitializer {
                                 : secondsLeft + "s";
 
                         if (currentMode == DisplayMode.TITLE) {
-                            client.gui.setTitle(Component.literal("⏳ Effect Fading"));
-                            client.gui.setSubtitle(Component.literal(formattedName + " ends in " + timeText));
-                            client.gui.setTimes(10, 40, 10);
+                            client.gui.hud.setTitle(Component.literal("⏳ Effect Fading"));
+                            client.gui.hud.setSubtitle(Component.literal(formattedName + " ends in " + timeText));
+                            client.gui.hud.setTimes(10, 40, 10);
                         } else {
                             player.sendSystemMessage(Component.literal("⏳ " + formattedName + " ends in " + timeText));
                         }
@@ -238,7 +238,7 @@ public class EffectMonitor implements ClientModInitializer {
                         thresholds.set(index, newVal);
                         thresholds.sort(Collections.reverseOrder());
                         saveSettings();
-                        Minecraft.getInstance().setScreen(new ConfigScreen());
+                        Minecraft.getInstance().gui.setScreen(new ConfigScreen());
                     }
                 }).bounds(centerX - 70, posY, 20, 20).tooltip(Tooltip.create(Component.literal("Decrease by 5s"))).build());
 
@@ -251,7 +251,7 @@ public class EffectMonitor implements ClientModInitializer {
                         thresholds.set(index, newVal);
                         thresholds.sort(Collections.reverseOrder());
                         saveSettings();
-                        Minecraft.getInstance().setScreen(new ConfigScreen());
+                        Minecraft.getInstance().gui.setScreen(new ConfigScreen());
                     }
                 }).bounds(centerX + 50, posY, 20, 20).tooltip(Tooltip.create(Component.literal("Increase by 5s"))).build());
 
@@ -260,7 +260,7 @@ public class EffectMonitor implements ClientModInitializer {
                         thresholds.remove(index);
                         thresholds.sort(Collections.reverseOrder());
                         saveSettings();
-                        Minecraft.getInstance().setScreen(new ConfigScreen());
+                        Minecraft.getInstance().gui.setScreen(new ConfigScreen());
                     }).bounds(centerX + 75, posY, 20, 20).tooltip(Tooltip.create(Component.literal("Remove this threshold"))).build());
                 }
             }
@@ -273,7 +273,7 @@ public class EffectMonitor implements ClientModInitializer {
                                 thresholds.add(candidate);
                                 thresholds.sort(Collections.reverseOrder());
                                 saveSettings();
-                                Minecraft.getInstance().setScreen(new ConfigScreen());
+                                Minecraft.getInstance().gui.setScreen(new ConfigScreen());
                             }
                         }).bounds(centerX - 100, sectionY + thresholds.size() * lineSpacing, 200, 20)
                         .tooltip(Tooltip.create(Component.literal("Add a new threshold (max 3)"))).build());
