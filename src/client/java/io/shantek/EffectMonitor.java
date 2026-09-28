@@ -15,6 +15,7 @@ import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import java.io.*;
 import java.util.*;
@@ -47,18 +48,22 @@ public class EffectMonitor implements ClientModInitializer {
     public void onInitializeClient() {
         loadSettings();
 
+        KeyMapping.Category keyCategory = KeyMapping.Category.register(
+                Identifier.fromNamespaceAndPath("effectmonitor", "main")
+        );
+
         openConfigKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.effectmonitor.config",
                 InputConstants.Type.KEYBOARD,
                 InputConstants.UNKNOWN.getValue(),
-                KeyMapping.Category.MISC
+                keyCategory
         ));
 
         toggleNotificationsKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.effectmonitor.toggle",
                 InputConstants.Type.KEYBOARD,
                 InputConstants.UNKNOWN.getValue(),
-                KeyMapping.Category.MISC
+                keyCategory
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
